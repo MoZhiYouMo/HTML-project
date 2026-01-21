@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>增强版 GIS 平台</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+    #map {
+      height: 100vh;
+      width: 100%;
+    }
+    .toolbar {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    .toolbar input,
+    .toolbar button {
+      margin: 5px 0;
+      padding: 6px 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #coords {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.8);
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- 地图容器 -->
+<div id="map"></div>
+
+<!-- 工具栏 -->
+<div class="toolbar">
+  <input type="text" id="search-input" placeholder="输入地名（如：上海）" />
+  <button id="btn-search">🔍 搜索</button>
+  <button id="btn-clear">🗑️ 清除标记</button>
+  <div style="margin-top: 10px; font-size:12px; color:#666;">
+    点击地图任意位置添加标记
+  </div>
+</div>
+
+<!-- 鼠标坐标显示 -->
+<div id="coords">纬度: --, 经度: --</div>
+
+<!-- Leaflet JS -->
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+  // 初始化地图（默认中心：中国）
+  const map = L.map('map').setView([35.8617, 104.1954], 5);
+
+  // 底图图层
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  });
+
+  const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+  });
+
+  const terrain = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+  });
+
+  // 默认加载卫星图
+  satellite.addTo(map);
+
+  // 图层控制
+  const baseLayers = {
+    "卫星图": satellite,
+    "街道图": osm,
+    "地形图": terrain
+  };
+  L.control.layers(baseLayers).addTo(map);
+
+  // 存储用户添加的标记
+  const markers = L.layerGroup().addTo(map);
+
+  // 点击地图添加标记
+  map.on('click', function(e) {
+    const marker = L.marker(e.latlng).addTo(markers);
+    marker.bindPopup(`纬度: ${e.latlng.lat.toFixed(5)}<br>经度: ${e.latlng.lng.toFixed(5)}<br><button onclick="deleteMarker(this)">🗑️ 删除</button>`);
+  });
+
+  // 删除标记函数（全局）
+  window.deleteMarker = function(btn) {
+    const popup = btn.closest('.leaflet-popup-content-wrapper');
+    const marker = popup._leaflet_parent;
+    markers.removeLayer(marker);
+  };
+
+  // 搜索功能
+  document.getElementById('btn-search').addEventListener('click', searchLocation);
+  document.getElementById('search-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') searchLocation();
+  });
+
+  function searchLocation() {
+    const query = document.getElementById('search-input').value.trim();
+    if (!query) return;
+
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lon = parseFloat(data[0].lon);
+          map.setView([lat, lon], 12);
+          L.marker([lat, lon]).addTo(map)
+            .bindPopup(`<b>${data[0].display_name}</b>`).openPopup();
+        } else {
+          alert('未找到该地点');
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert('搜索失败，请检查网络');
+      });
+  }
+
+  // 清除所有用户标记
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    markers.clearLayers();
+  });
+
+  // 显示鼠标坐标
+  const coordsDiv = document.getElementById('coords');
+  map.on('mousemove', function(e) {
+    coordsDiv.innerHTML = `纬度: ${e.latlng.lat.toFixed(5)}, 经度: ${e.latlng.lng.toFixed(5)}`;
+  });
+</script>
+
+</body>
+</html>
